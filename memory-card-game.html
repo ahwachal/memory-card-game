@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<!-- 10/14/19 - Andrew Wachal - Project 2 -->
+<head>
+<style>
+table, th, td {
+	border: 2px solid black;
+	border-collapse: collapse;
+}
+th {
+	text-align: left;
+}
+</style>
+<meta charset="utf-8" />
+<script>
+<!-- set some global variables here..... -->
+//constants
+const minSize = 4;
+const maxSize = 10;
+const maxNum = 4;
+const maxColorIndex = 10;
+const colors = ["maroon", "red", "orange", "yellow", "green", "purple", "lime", "blue", "gray", "white"];
+const matchMessage = "It's a match! Click here to remove cards."
+const notMatchMessage =  "Not a match. Click here to flip cards.";
+const turnMessage = ", it is your turn. Please select two cards.";
+
+var size;
+var cardFlips = 0;
+var flippedCards = [];
+var board = [];
+var playerTurn;
+var player1;
+var player2;
+var numFound = 0;
+var cardBackStyle = "background-color:gray;padding:30px;font-size:x-large";
+var removedStyle =  "background-color:white;padding:30px;font-size:x-large";
+var cellIDs = [];
+var removedCards = [];
+
+<!-- startGame():  ask the players' names, and size of board           -->
+<!--               then call a function to set up the board            -->
+function startGame() {
+	askNames();
+	size = askSize();
+	board = makeBoard(size);
+	document.getElementById("message").innerHTML = playerTurn + turnMessage;
+
+} // startGame();
+
+function askNames() {
+	player1 = prompt("Enter player 1's name:", "");
+	player2 = prompt("Enter player 2's name:", "");
+	playerTurn  = player1;
+	document.getElementById("player1").innerHTML = player1;
+	document.getElementById("player2").innerHTML = player2;
+}
+
+function askSize(){
+	isGood = false
+	while (!isGood){ 
+		var sizeString = prompt("Enter board size:", "An even integer between 4 and 10");
+		var boardSize = Number(sizeString);
+		if (Number.isNaN(boardSize)){
+			isGood = false;
+		}
+		else{
+			if (!Number.isInteger(boardSize)){
+				isGood = false;
+			}
+			else if (boardSize < minSize || boardSize > maxSize){
+				isGood = false;
+			}
+			else if (boardSize % 2 != 0){
+				isGood = false;
+			}
+			else {
+				isGood = true;
+				return boardSize;
+			}
+		}
+	}	
+}
+
+//creates a random permutation of indices and swaps everything according to the key
+function randPerm(list){
+	var permKey = [];
+	permKey[0] = Math.floor(Math.random()*list.length);
+	while (permKey.length < list.length){
+		var i;
+      		//add random numbers to the permutation key without repeats
+		var randNum = Math.floor(Math.random()*list.length);
+		found = false;
+		for (i = 0; i < permKey.length; i++){
+			if (permKey[i] == randNum){
+				found = true;
+			}
+		}
+		if (!found){
+			permKey.push(randNum);
+		}
+	}
+	var newlist = [];
+	//swap array according to key
+	for (i = 0; i < list.length; i++){
+		newlist[i] = list[permKey[i]]
+	}
+	return newlist;
+}
+
+//creates an array of object cards to be the board
+function makeBoard(size){
+	//randomly make half
+	//size of the board is n^2 so we need to make (n^2) entries
+	var i;
+	for (i = 0; i < (size*size)/2; i++){
+		var cardNum = Math.floor(Math.random()*maxNum) + 1;  //returns int 1-4
+		var colorIndex = Math.floor(Math.random()*maxColorIndex); 	//returns int 0-9
+		var cardColor = colors[colorIndex];
+		var card = {num: cardNum, color: cardColor};
+		board[i] = card;
+	}
+	//double it to guarantee that each card has a match
+	var offset = (size*size)/2;
+	for (i = 0; i < (size*size)/2; i++){
+		board[i+offset] = board[i];
+	}
+	
+	//random permutation
+	board = randPerm(board);
+	return board;
+}
+
+//build a blank board according to size, showing backs of cards
+function showBoard(){
+	var table = document.getElementById("theBoard");
+	var i;
+	for(i = 0; i < size; i++){
+		var row = table.insertRow(i);
+		var j;
+		for(j = 0; j < size; j++){
+			var cell = row.insertCell(j);
+			var index = size*i+j;
+			cell.innerHTML = "-";
+			cell.style.cssText = cardBackStyle;
+			cell.id = "cell" + index;
+      		}
+		
+	}
+}
+//do stuff if a card is clicked
+function clickCards(){
+      	for (var i = 0; i < (size*size); i++){
+      		var cell = "cell"+i;
+		//only do stuff if the card has not been matched already
+      		if (!removedCards.includes(cell)){
+        		document.getElementById(cell).addEventListener("click", flipCard);
+      			document.getElementById(cell).addEventListener("click", addCards);
+			document.getElementById(cell).addEventListener("click", storeCells);
+		}
+	}
+      	//return 0;
+}
+//don't do stuff if a card is clicked
+function endClickCards(){
+      	for(var i = 0; i < (size*size); i++){
+      		document.getElementById("cell"+i).removeEventListener("click", flipCard);
+		document.getElementById("cell"+i).removeEventListener("click", addCards);
+		document.getElementById("cell"+i).removeEventListener("click", storeCells);
+        }
+	startNextTurn();
+      	//return 0;
+}
+
+function startNextTurn(){
+	//compare cards
+	var isMatch = checkCards(flippedCards[0], flippedCards[1]);
+	//if it is a match, add point to scoreboard, print message that it is a match
+	if (isMatch){
+		addPoint();
+		document.getElementById("message").innerHTML = matchMessage;
+		//on click of message, remove cards and go to next turn
+		document.getElementById("message").addEventListener("click", removeCards);
+
+	}
+
+	// if it is not a match, print message
+	else {
+		document.getElementById("message").innerHTML = notMatchMessage;
+		//on click of message, flips cards back over and go to next turn
+		document.getElementById("message").addEventListener("click", flipCardsToBack);
+	}
+}
+
+//re-initializes variables to 0, then goes to the turn
+function nextTurn(){
+      	document.getElementById("message").innerHTML = playerTurn + turnMessage;
+      	cardFlips = 0;
+      	for (var i = 0; i < flippedCards.length; i++){
+      		flippedCards.pop();
+      		cellIDs.pop();
+      	}
+      	aTurn();
+}      		
+
+//removes cards if they are matched by showing them as blank in browser, keeps track in an array
+function removeCards(){
+	for (var x of cellIDs){
+		removedCards.push(x);
+		document.getElementById(x).innerHTML = "-";
+		document.getElementById(x).style.cssText = removedStyle;
+	}
+	document.getElementById("message").removeEventListener("click", removeCards);		//don't do anything when click on message anymore
+	nextTurn();
+
+}
+
+//flips cards if they are no matched by showing them as card backs in browser, changes player
+function flipCardsToBack(){
+	nextPlayer();
+	for (var x of cellIDs){
+        	document.getElementById(x).innerHTML = "-";
+                document.getElementById(x).style.cssText = cardBackStyle;
+      	}
+	document.getElementById("message").removeEventListener("click", flipCardsToBack);
+	nextTurn();
+}
+
+//keep track of the cells that are clicked, also increment counter of clicks
+function storeCells(){
+	this.removeEventListener("click", storeCells);		//don't let someone click card twice
+      	cellIDs[cardFlips] = this.id;
+	cardFlips++;
+	if (cardFlips == 2){
+		endClickCards();				//don't let them click more than 2 cards
+	}
+}
+
+//changes players' turn
+function nextPlayer(){
+      	if(playerTurn == player1){
+      		playerTurn = player2;
+      	}
+      	else if(playerTurn == player2){
+      		playerTurn = player1;
+      	}
+}
+
+//keeps track of the card objects that are clicked
+function addCards(){
+	this.removeEventListener("click", flipCard);		//this can't get clicked twice
+	var cellID = this.id;
+	var index = cellID.split("cell")[1];
+	index = Number(index);
+	flippedCards[cardFlips] = board[index];
+}
+
+//flips a card
+function flipCard(){
+	this.removeEventListener("click", flipCard);		//this can't get clicked twice
+	var cellID = this.id;
+	var index = cellID.split("cell")[1];			//split "cellID" into just the ID
+	index = Number(index);
+	this.innerHTML = board[index].num;
+      	var card = this;
+	this.style.backgroundColor = board[index].color;
+      	card.color = this.style.backgroundColor;
+	this.style.padding = "30px";
+	this.style.fontSize = "x-large";
+}
+
+//compares 2 cards to see if they match
+function checkCards(card1, card2){
+	if (card1.num == card2.num && card1.color == card2.color){
+		return true;
+	}
+	else{
+		return false;
+	}
+}
+
+//when all cards are flipped, compare scores of players to see who won or if there is a tie
+function compareScores(){
+      	document.getElementById("concede").removeEventListener("click", concede);	//if the game is over, no one should be able to concede anymore
+      	var player1score = document.getElementById("player1score").innerHTML;
+	player1score = Number(player1score);
+	var player2score = document.getElementById("player2score").innerHTML;
+	player2score = Number(player2score);
+	if (player1score > player2score){
+		alert(player1 + " wins!");
+	}
+	else if (player1score < player2score){
+		alert(player2 + " wins!");
+	}
+	else if (player1score == player2score){
+		alert("It's a tie!");
+	}
+}
+
+//add a point to the scoreboard for a player if the cards matched
+function addPoint(){
+	var player;
+	if (playerTurn == player1){
+		player = "player1";
+	}
+	else if (playerTurn == player2){
+		player = "player2";
+	}
+	var score = document.getElementById(player + "score").innerHTML;
+	score = Number(score);
+	score = score + 1;						//increment score
+	document.getElementById(player + "score").innerHTML = score;
+      	numFound = numFound + 2;					//increment number of cards found
+        
+      	//if all cards are flipped, game is over so compare scores
+      	if (numFound == size*size){
+      		compareScores();
+        }
+
+      	//return 0;
+}
+
+//stuff that happens within a turn
+function aTurn(){
+	cardFlips = 0;
+      	clickCards();
+}
+
+//stuff that happens when playing the game
+function playGame(board){
+	showBoard();
+      	concedeGame();
+      	aTurn();
+}
+
+//listen for concede
+function concedeGame(){
+      	document.getElementById("concede").addEventListener("click", concede);
+}
+
+//concede the game by pressing a button
+function concede(){
+      	//can't clicked on any cells anymore
+      	for(var i = 0; i < (size*size); i++){
+        	document.getElementById("cell"+i).removeEventListener("click", flipCard);
+                document.getElementById("cell"+i).removeEventListener("click", addCards);
+                document.getElementById("cell"+i).removeEventListener("click", storeCells);
+        }
+      	//can't click on the message anymore
+      	document.getElementById("message").removeEventListener("click", removeCards);
+      	document.getElementById("message").removeEventListener("click", flipCardsToBack);
+      	var player = playerTurn;
+      	if (player == player1){
+      		var otherplayer = player2;
+      	}
+      	else if (player == player2){
+      		var otherplayer = player1;
+      	}
+      	//send alert to notify players
+      	alert(playerTurn +" conceded. " + otherplayer + " wins!");
+      	document.getElementById("message").innerHTML = playerTurn + " conceded. " + otherplayer + " wins!";
+}
+
+</script>
+
+</head>
+
+<body>
+
+<table id="scoreBoard">
+	<tr>
+		<th colspan="2">Player 1</th>
+		<th colspan="2">Player 2</th>
+	</tr>
+	<tr>
+		<td id="player1"></td>
+		<td id="player1score">0</td>
+		<td id="player2"></td>
+		<td id="player2score">0</td>
+	</tr>
+</table>
+
+<table id="theBoard">
+	<!-- populated in JavaScript -->
+</table>
+
+<table id="controlBoard">
+	<tr>
+		<th>Message</th>
+		<th></th>
+	</tr>
+	<tr>
+		<td id="message"></th>
+		<td id="concede">Concede Game</th>
+	</tr>
+</table>
+
+<script>
+	//play the game
+	startGame();
+	playGame(board);
+	
+</script>
+
+</body>
+</html>
